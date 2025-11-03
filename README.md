@@ -75,7 +75,7 @@ Outputs:
 ## 📊 Default Hyperparams
 | Param | Default | Note |
 |--------|----------|------|
-| epochs | 20 | Meets ≥20 epoch requirement |
+| epochs | 30 | Meets ≥20 epoch requirement and is enough to guerantee convergence |
 | lr | 3e-4 | Stable for AdamW + ViT |
 | weight_decay | 0.05 | Standard ViT regularization |
 | batch_size | 128 | Balanced for GPU efficiency |
