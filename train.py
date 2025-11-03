@@ -8,6 +8,7 @@ import torch
 from pathlib import Path
 from torch import nn
 from torch.optim.lr_scheduler import _LRScheduler
+from torch.nn.utils import clip_grad_norm_
 
 if __package__ is None or __package__ == "":  # pragma: no cover - runtime path adjustment
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -44,7 +45,7 @@ def train(cfg: Config) -> None:
     logger.write("Building model and optimizer…")
     model = build_model(cfg.num_classes)
     model, device = to_device(model)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     optimizer = make_optimizer(model, cfg.lr, cfg.weight_decay)
 
     total_steps = cfg.epochs * len(train_loader)
@@ -72,6 +73,7 @@ def train(cfg: Config) -> None:
             epoch,
             cfg.epochs,
             logger,
+            cfg.grad_clip_norm,
         )
         log_epoch(logger, recorder, train_metrics)
 
@@ -110,6 +112,7 @@ def train_one_epoch(
     epoch: int,
     max_epochs: int,
     logger: Logger,
+    grad_clip_norm: float,
 ) -> tuple[EpochMetrics, int]:
     """Train for a single epoch and return averaged metrics."""
 
@@ -130,6 +133,11 @@ def train_one_epoch(
             loss = criterion(outputs, targets)
 
         scaler.scale(loss).backward()
+
+        if grad_clip_norm and grad_clip_norm > 0:
+            scaler.unscale_(optimizer)
+            clip_grad_norm_(model.parameters(), grad_clip_norm)
+
         scaler.step(optimizer)
         scaler.update()
 
