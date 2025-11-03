@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import argparse, json, torch
 from pathlib import Path
 from torch import nn
