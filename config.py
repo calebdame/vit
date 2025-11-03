@@ -1,8 +1,15 @@
+"""Configuration dataclass storing experiment defaults."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 
+
 @dataclass
 class Config:
+    """Bundle all experiment hyperparameters in a single place."""
+
     data_dir: Path = Path("./data")
     ckpt_dir: Path = Path("./checkpoints")
     log_dir: Path = Path("./logs")
