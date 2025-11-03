@@ -10,7 +10,7 @@ class Config:
     seed: int = 42
 
     batch_size: int = 128
-    epochs: int = 20
+    epochs: int = 30
     lr: float = 3e-4            # AdamW-friendly for ViTs from scratch
     weight_decay: float = 0.05   # Strong regularization common in ViT literature
     img_size: int = 224          # ViT-B/16 default
