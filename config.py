@@ -25,6 +25,8 @@ class Config:
     num_classes: int = 100
     warmup_epochs: int = 2
     use_amp: bool = True
+    grad_clip_norm: float = 1.0
+    label_smoothing: float = 0.1
 
     # filenames
     best_ckpt: str = "best.pt"
