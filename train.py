@@ -1,54 +1,169 @@
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from __future__ import annotations
 
-import argparse, json, torch
+import argparse
+import os
+import sys
+
+import torch
 from pathlib import Path
 from torch import nn
+from torch.optim.lr_scheduler import _LRScheduler
+
+if __package__ is None or __package__ == "":  # pragma: no cover - runtime path adjustment
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 from vit.config import Config
-from vit.utils import (Logger, seed_everything, ensure_dirs,
-                                     evaluate, dump_hparams, accuracy)
+from vit.utils import (
+    Logger,
+    MetricsRecorder,
+    EpochMetrics,
+    AverageMeter,
+    seed_everything,
+    ensure_dirs,
+    evaluate,
+    dump_hparams,
+    log_epoch,
+    topk_accuracy,
+)
 from vit.data import get_dataloaders
 from vit.model import build_model, to_device
 from vit.optim import make_optimizer, make_scheduler, adjust_lr
 
-def train(cfg: Config):
+def train(cfg: Config) -> None:
     ensure_dirs(cfg.ckpt_dir, cfg.log_dir, cfg.artifacts_dir)
     seed_everything(cfg.seed)
-    logger = Logger(Path(cfg.log_dir) / cfg.train_log)
 
+    log_path = Path(cfg.log_dir) / cfg.train_log
+    metrics_path = Path(cfg.log_dir) / "training_metrics.jsonl"
+    logger = Logger(log_path)
+    recorder = MetricsRecorder(metrics_path)
+
+    logger.write("Preparing data loaders…")
     train_loader, val_loader, _, _, _ = get_dataloaders(cfg, logger)
-    model = build_model(cfg.num_classes); model, device = to_device(model)
+
+    logger.write("Building model and optimizer…")
+    model = build_model(cfg.num_classes)
+    model, device = to_device(model)
     criterion = nn.CrossEntropyLoss()
     optimizer = make_optimizer(model, cfg.lr, cfg.weight_decay)
+
     total_steps = cfg.epochs * len(train_loader)
     warmup_steps = max(1, cfg.warmup_epochs * len(train_loader))
     scheduler = make_scheduler(optimizer, total_steps, warmup_steps)
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda" and cfg.use_amp))
+    scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda" and cfg.use_amp)
 
     dump_hparams(logger, cfg)
-    best_val_acc, global_step = 0.0, 0
+
+    best_val_top1 = 0.0
+    global_step = 0
+
     for epoch in range(1, cfg.epochs + 1):
-        model.train(); ep_loss=0.0; ep_acc=0.0; n_seen=0
-        for images, targets in train_loader:
-            adjust_lr(optimizer, cfg.lr, global_step, warmup_steps); global_step += 1
-            images, targets = images.to(device), targets.to(device)
-            optimizer.zero_grad(set_to_none=True)
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=scaler.is_enabled()):
-                outputs = model(images); loss = criterion(outputs, targets)
-            scaler.scale(loss).backward(); scaler.step(optimizer); scaler.update()
-            b = targets.size(0); ep_loss += loss.item()*b; ep_acc += accuracy(outputs,targets)*b; n_seen += b
-        scheduler.step()
-        tr_loss, tr_acc = ep_loss/n_seen, ep_acc/n_seen
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save({"model": model.state_dict(), "acc": val_acc},
-                       Path(cfg.ckpt_dir) / cfg.best_ckpt)
-        logger.write(f"Epoch {epoch:02d}/{cfg.epochs} "
-                     f"train_loss:{tr_loss:.4f} train_acc:{tr_acc:.4f} "
-                     f"val_loss:{val_loss:.4f} val_acc:{val_acc:.4f} "
-                     f"best_val_acc:{best_val_acc:.4f}")
+        train_metrics, global_step = train_one_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            scheduler,
+            scaler,
+            device,
+            cfg.lr,
+            warmup_steps,
+            global_step,
+            epoch,
+            cfg.epochs,
+            logger,
+        )
+        log_epoch(logger, recorder, train_metrics)
+
+        val_loss, val_top1, val_top5 = evaluate(model, val_loader, criterion, device)
+        metrics = EpochMetrics(
+            epoch=epoch,
+            stage="val",
+            loss=val_loss,
+            top1=val_top1,
+            top5=val_top5,
+            lr=optimizer.param_groups[0]["lr"],
+        )
+        log_epoch(logger, recorder, metrics)
+
+        if val_top1 > best_val_top1:
+            best_val_top1 = val_top1
+            save_path = Path(cfg.ckpt_dir) / cfg.best_ckpt
+            torch.save({"model": model.state_dict(), "top1": val_top1}, save_path)
+            logger.write(f"Saved new best checkpoint to {save_path} (top1={val_top1:.4f})")
+
     logger.close()
+    recorder.close()
+
+
+def train_one_epoch(
+    model: torch.nn.Module,
+    loader,
+    criterion: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: _LRScheduler,
+    scaler: torch.cuda.amp.GradScaler,
+    device: torch.device,
+    base_lr: float,
+    warmup_steps: int,
+    global_step: int,
+    epoch: int,
+    max_epochs: int,
+    logger: Logger,
+) -> tuple[EpochMetrics, int]:
+    """Train for a single epoch and return averaged metrics."""
+
+    loss_meter = AverageMeter()
+    top1_meter = AverageMeter()
+    top5_meter = AverageMeter()
+
+    model.train()
+    for step, (images, targets) in enumerate(loader, start=1):
+        adjust_lr(optimizer, base_lr, global_step, warmup_steps)
+        global_step += 1
+
+        images, targets = images.to(device, non_blocking=True), targets.to(device)
+        optimizer.zero_grad(set_to_none=True)
+
+        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=scaler.is_enabled()):
+            outputs = model(images)
+            loss = criterion(outputs, targets)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        batch_size = targets.size(0)
+        loss_meter.update(loss.item(), batch_size)
+        top1_meter.update(topk_accuracy(outputs, targets, k=1).item(), batch_size)
+        top5_meter.update(topk_accuracy(outputs, targets, k=5).item(), batch_size)
+
+        if step % 25 == 0 or step == len(loader):
+            logger.write(
+                " | ".join(
+                    [
+                        f"epoch={epoch:03d}/{max_epochs:03d}",
+                        f"step={step:04d}/{len(loader):04d}",
+                        f"loss={loss_meter.avg:.4f}",
+                        f"top1={top1_meter.avg:.4f}",
+                        f"top5={top5_meter.avg:.4f}",
+                        f"lr={optimizer.param_groups[0]['lr']:.6f}",
+                    ]
+                )
+            )
+
+    scheduler.step()
+
+    metrics = EpochMetrics(
+        epoch=epoch,
+        stage="train",
+        loss=loss_meter.avg,
+        top1=top1_meter.avg,
+        top5=top5_meter.avg,
+        lr=optimizer.param_groups[0]["lr"],
+    )
+
+    return metrics, global_step
 
 def parse_args():
     p = argparse.ArgumentParser(description="Train ViT on CIFAR-100 (from scratch).")
@@ -70,10 +185,18 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     cfg = Config(
-        data_dir=args.data_dir, ckpt_dir=args.ckpt_dir, log_dir=args.log_dir,
-        artifacts_dir=args.artifacts_dir, seed=args.seed, batch_size=args.batch_size,
-        epochs=args.epochs, lr=args.lr, weight_decay=args.weight_decay,
-        img_size=args.img_size, num_workers=args.num_workers,
-        warmup_epochs=args.warmup_epochs, use_amp=not args.no_amp
+        data_dir=args.data_dir,
+        ckpt_dir=args.ckpt_dir,
+        log_dir=args.log_dir,
+        artifacts_dir=args.artifacts_dir,
+        seed=args.seed,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        img_size=args.img_size,
+        num_workers=args.num_workers,
+        warmup_epochs=args.warmup_epochs,
+        use_amp=not args.no_amp,
     )
     train(cfg)

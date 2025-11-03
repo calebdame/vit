@@ -25,6 +25,7 @@ vit/
 ├── optim.py           # Optimizer, scheduler, warmup
 ├── train.py           # CLI entry: training
 ├── eval.py            # CLI entry: evaluation
+├── experiments.tex    # LaTeX report template placeholder
 └── requirements.txt
 ```
 
@@ -58,7 +59,8 @@ Override defaults:
 python -m vit.train --epochs 30 --lr 2e-4 --batch_size 256 --img_size 224 --no_amp
 ```
 
-Logs → `logs/training_log.txt`  
+Logs → `logs/training_log.txt`
+Structured metrics → `logs/training_metrics.jsonl`
 Checkpoint → `checkpoints/best.pt`
 
 ### Evaluate
@@ -66,8 +68,9 @@ Checkpoint → `checkpoints/best.pt`
 python -m vit.eval
 ```
 Outputs:
-- logs/test_eval_log.txt  
-- artifacts/confusion_matrix.png  
+- logs/test_eval_log.txt
+- logs/evaluation_metrics.jsonl
+- artifacts/confusion_matrix.png
 - artifacts/misclassified_grid.png
 
 ---
@@ -87,11 +90,11 @@ Outputs:
 ---
 
 ## Key Design Choices
-- **No pretraining:** Required by assignment  
-- **AutoAugment(IMAGENET):** Increases patch diversity  
-- **Cosine LR + warmup:** Smooth convergence  
-- **AMP:** Speeds up training on GPU  
-- **Logging:** Plain text for reproducibility  
+- **No pretraining:** Required by assignment
+- **AutoAugment(IMAGENET):** Increases patch diversity
+- **Cosine LR + warmup:** Smooth convergence
+- **AMP:** Speeds up training on GPU
+- **Logging:** Text log + JSONL metrics for downstream analysis
 
 ---
 
