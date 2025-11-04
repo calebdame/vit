@@ -43,7 +43,7 @@ def train(cfg: Config) -> None:
     train_loader, val_loader, _, _, _ = get_dataloaders(cfg, logger)
 
     logger.write("Building model and optimizer…")
-    model = build_model(cfg.num_classes)
+    model = build_model(cfg.num_classes, cfg.vit)
     model, device = to_device(model)
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     optimizer = make_optimizer(model, cfg.lr, cfg.weight_decay)

@@ -81,7 +81,6 @@ def build_transforms(img_size: int) -> tuple[transforms.Compose, transforms.Comp
             transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),
             transforms.ToTensor(),
             transforms.Normalize(IM_MEAN, IM_STD),
-            transforms.RandomErasing(p=0.25),
         ]
     )
     eval_transform = transforms.Compose(

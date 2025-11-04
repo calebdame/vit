@@ -17,16 +17,19 @@ class Config:
     seed: int = 42
 
     batch_size: int = 128
-    epochs: int = 30
-    lr: float = 3e-4            # AdamW-friendly for ViTs from scratch
-    weight_decay: float = 0.05   # Strong regularization common in ViT literature
+    epochs: int = 500
+    lr: float = 2e-4            # AdamW-friendly for ViTs from scratch
+    weight_decay: float = 1e-3   # Strong regularization common in ViT literature
     img_size: int = 224          # ViT-B/16 default
     num_workers: int = 4
     num_classes: int = 100
-    warmup_epochs: int = 2
+    warmup_epochs: int = 5
     use_amp: bool = True
-    grad_clip_norm: float = 1.0
-    label_smoothing: float = 0.1
+    grad_clip_norm: float = 10.0
+    label_smoothing: float = 0.01
+
+    # net size
+    vit: str = "16"
 
     # filenames
     best_ckpt: str = "best.pt"
