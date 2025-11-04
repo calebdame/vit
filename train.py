@@ -141,6 +141,9 @@ def train_one_epoch(
         scaler.step(optimizer)
         scaler.update()
 
+        if global_step > warmup_steps:
+            scheduler.step()
+
         batch_size = targets.size(0)
         loss_meter.update(loss.item(), batch_size)
         top1_meter.update(topk_accuracy(outputs, targets, k=1).item(), batch_size)
@@ -159,8 +162,6 @@ def train_one_epoch(
                     ]
                 )
             )
-
-    scheduler.step()
 
     metrics = EpochMetrics(
         epoch=epoch,
