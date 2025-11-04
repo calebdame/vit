@@ -79,8 +79,11 @@ def build_transforms(img_size: int) -> tuple[transforms.Compose, transforms.Comp
             transforms.RandomResizedCrop(img_size, scale=(0.6, 1.0)),
             transforms.RandomHorizontalFlip(0.5),
             transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),
+            # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            # transforms.RandAugment(num_ops=2, magnitude=9),
             transforms.ToTensor(),
             transforms.Normalize(IM_MEAN, IM_STD),
+            # transforms.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=IM_MEAN),
         ]
     )
     eval_transform = transforms.Compose(

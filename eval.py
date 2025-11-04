@@ -91,7 +91,12 @@ def evaluate_test(cfg: Config) -> None:
 
     logger.write("Loading datasets and checkpoint…")
     _, _, test_loader, _, _ = get_dataloaders(cfg)
-    model = build_model(cfg.num_classes)
+    model = build_model(
+        num_classes=cfg.num_classes,
+        vit_name=cfg.vit,
+        head_dropout=cfg.head_dropout,
+        stochastic_depth_prob=cfg.stochastic_depth_prob,
+    )
     model, device = to_device(model)
     ckpt_path = Path(cfg.ckpt_dir) / cfg.best_ckpt
     ckpt = torch.load(ckpt_path, map_location=device)
@@ -133,11 +138,27 @@ def parse_args():
     p.add_argument("--img_size", type=int, default=Config.img_size)
     p.add_argument("--num_workers", type=int, default=Config.num_workers)
     p.add_argument("--batch_size", type=int, default=Config.batch_size)
+    p.add_argument("--vit", type=str, default=Config.vit)
+    p.add_argument("--head_dropout", type=float, default=Config.head_dropout)
+    p.add_argument(
+        "--stochastic_depth_prob",
+        type=float,
+        default=Config.stochastic_depth_prob,
+    )
     return p.parse_args()
 
 if __name__ == "__main__":
     a = parse_args()
-    cfg = Config(data_dir=a.data_dir, ckpt_dir=a.ckpt_dir, log_dir=a.log_dir,
-                 artifacts_dir=a.artifacts_dir, img_size=a.img_size,
-                 num_workers=a.num_workers, batch_size=a.batch_size)
+    cfg = Config(
+        data_dir=a.data_dir,
+        ckpt_dir=a.ckpt_dir,
+        log_dir=a.log_dir,
+        artifacts_dir=a.artifacts_dir,
+        img_size=a.img_size,
+        num_workers=a.num_workers,
+        batch_size=a.batch_size,
+        vit=a.vit,
+        head_dropout=a.head_dropout,
+        stochastic_depth_prob=a.stochastic_depth_prob,
+    )
     evaluate_test(cfg)

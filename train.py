@@ -43,7 +43,12 @@ def train(cfg: Config) -> None:
     train_loader, val_loader, _, _, _ = get_dataloaders(cfg, logger)
 
     logger.write("Building model and optimizer…")
-    model = build_model(cfg.num_classes, cfg.vit)
+    model = build_model(
+        num_classes=cfg.num_classes,
+        vit_name=cfg.vit,
+        head_dropout=cfg.head_dropout,
+        stochastic_depth_prob=cfg.stochastic_depth_prob,
+    )
     model, device = to_device(model)
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     optimizer = make_optimizer(model, cfg.lr, cfg.weight_decay)
@@ -185,9 +190,16 @@ def parse_args():
     p.add_argument("--epochs", type=int, default=Config.epochs)
     p.add_argument("--lr", type=float, default=Config.lr)
     p.add_argument("--weight_decay", type=float, default=Config.weight_decay)
+    p.add_argument("--label_smoothing", type=float, default=Config.label_smoothing)
     p.add_argument("--img_size", type=int, default=Config.img_size)
     p.add_argument("--num_workers", type=int, default=Config.num_workers)
     p.add_argument("--warmup_epochs", type=int, default=Config.warmup_epochs)
+    p.add_argument("--head_dropout", type=float, default=Config.head_dropout)
+    p.add_argument(
+        "--stochastic_depth_prob",
+        type=float,
+        default=Config.stochastic_depth_prob,
+    )
     p.add_argument("--no_amp", action="store_true")
     return p.parse_args()
 
@@ -203,9 +215,12 @@ if __name__ == "__main__":
         epochs=args.epochs,
         lr=args.lr,
         weight_decay=args.weight_decay,
+        label_smoothing=args.label_smoothing,
         img_size=args.img_size,
         num_workers=args.num_workers,
         warmup_epochs=args.warmup_epochs,
+        head_dropout=args.head_dropout,
+        stochastic_depth_prob=args.stochastic_depth_prob,
         use_amp=not args.no_amp,
     )
     train(cfg)
