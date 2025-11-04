@@ -19,14 +19,17 @@ class Config:
     batch_size: int = 128
     epochs: int = 500
     lr: float = 2e-4            # AdamW-friendly for ViTs from scratch
-    weight_decay: float = 1e-3   # Strong regularization common in ViT literature
+    weight_decay: float = 2e-3   # Slightly stronger AdamW regularization
     img_size: int = 224          # ViT-B/16 default
     num_workers: int = 4
     num_classes: int = 100
     warmup_epochs: int = 5
     use_amp: bool = True
     grad_clip_norm: float = 10.0
-    label_smoothing: float = 0.01
+    label_smoothing: float = 0.05
+
+    head_dropout: float = 0.1
+    stochastic_depth_prob: float = 0.1
 
     # net size
     vit: str = "16"
